@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+      #map {
+        height: 100%;
+      }
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+    </style>
+  </head>
+  <script src="www.gstatic.com/firebasejs/5.3.0/firebase.js"></script>
+  <body>
+    <div id="map"></div>
+
+    <script defer
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAYUUpyE3zkkRS_CDXHiE4uz0UQzNEfppY
+        &libraries=visualization&callback=initMap">
+    </script>
+
+    <script>
+        function initMap() {
+          var map = new google.maps.Map(document.getElementById('map'), {
+            center: {lat: 0, lng: 0},
+            zoom: 3,
+            styles: [{
+              featureType: 'poi',
+              stylers: [{ visibility: 'off' }]  // Turn off points of interest.
+            }, {
+              featureType: 'transit.station',
+              stylers: [{ visibility: 'off' }]  // Turn off bus stations, train stations, etc.
+            }],
+            disableDoubleClickZoom: true,
+            streetViewControl: false
+          });
+          // Create the DIV to hold the control and call the makeInfoBox() constructor
+          // passing in this DIV.
+          var infoBoxDiv = document.createElement('div');
+          var infoBox = new makeInfoBox(infoBoxDiv, map);
+          infoBoxDiv.index = 1;
+          map.controls[google.maps.ControlPosition.TOP_CENTER].push(infoBoxDiv);
+          // Create a heatmap.
+          var heatmap = new google.maps.visualization.HeatmapLayer({
+            data: [],
+            map: map,
+            radius: 16
+          });
+          
+        }
+        function makeInfoBox(controlDiv, map) {
+          // Set CSS for the control border.
+          var controlUI = document.createElement('div');
+          controlUI.style.boxShadow = 'rgba(0, 0, 0, 0.298039) 0px 1px 4px -1px';
+          controlUI.style.backgroundColor = '#fff';
+          controlUI.style.border = '2px solid #fff';
+          controlUI.style.borderRadius = '2px';
+          controlUI.style.marginBottom = '22px';
+          controlUI.style.marginTop = '10px';
+          controlUI.style.textAlign = 'center';
+          controlDiv.appendChild(controlUI);
+        
+          // Set CSS for the control interior.
+          var controlText = document.createElement('div');
+          controlText.style.color = 'rgb(25,25,25)';
+          controlText.style.fontFamily = 'Roboto,Arial,sans-serif';
+          controlText.style.fontSize = '100%';
+          controlText.style.padding = '6px';
+          controlText.innerText = 'The map shows all clicks made in the last 10 minutes.';
+          controlUI.appendChild(controlText);
+        }
+        var firebase = new Firebase("https://maps-test-it718.web.app/");
+        /**
+         * Set up a Firebase with deletion on clicks older than expirySeconds
+         * @param {!google.maps.visualization.HeatmapLayer} heatmap The heatmap to
+         * which points are added from Firebase.
+         */
+        function initFirebase(heatmap) {
+        
+          // 10 minutes before current time.
+          var startTime = new Date().getTime() - (60 * 10 * 1000);
+        
+          // Reference to the clicks in Firebase.
+          var clicks = firebase.database().ref('clicks');
+        
+          // Listen for clicks and add them to the heatmap.
+          clicks.orderByChild('timestamp').startAt(startTime).on('child_added',
+            function(snapshot) {
+              // Get that click from firebase.
+              var newPosition = snapshot.val();
+              var point = new google.maps.LatLng(newPosition.lat, newPosition.lng);
+              var elapsedMs = Date.now() - newPosition.timestamp;
+        
+              // Add the point to the heatmap.
+              heatmap.getData().push(point);
+        
+              // Request entries older than expiry time (10 minutes).
+              var expiryMs = Math.max(60 * 10 * 1000 - elapsed, 0);
+              // Set client timeout to remove the point after a certain time.
+              window.setTimeout(function() {
+                // Delete the old point from the database.
+                snapshot.ref.remove();
+              }, expiryMs);
+            }
+          );
+        
+          // Remove old data from the heatmap when a point is removed from firebase.
+          clicks.on('child_removed', function(snapshot, prevChildKey) {
+            var heatmapData = heatmap.getData();
+            var i = 0;
+            while (snapshot.val().lat != heatmapData.getAt(i).lat()
+              || snapshot.val().lng != heatmapData.getAt(i).lng()) {
+              i++;
+            }
+            heatmapData.removeAt(i);
+          });
+        }
+        
+    </script>
+
+  </body>
+</html>
